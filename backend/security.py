@@ -7,7 +7,6 @@ from slowapi import Limiter, _rate_limit_exceeded_handler
 from slowapi.util import get_remote_address
 from slowapi.errors import RateLimitExceeded
 from slowapi.middleware import SlowAPIMiddleware
-from secure import Secure
 from starlette.middleware.base import BaseHTTPMiddleware
 from starlette.responses import Response
 import time
@@ -20,14 +19,7 @@ from datetime import datetime, timedelta
 # Rate limiter setup
 limiter = Limiter(key_func=get_remote_address)
 
-# Security headers configuration
-secure_headers = Secure(
-    csp="default-src 'self'; script-src 'self' 'unsafe-inline' 'unsafe-eval'; style-src 'self' 'unsafe-inline'; img-src 'self' data: https:; font-src 'self' https:; connect-src 'self'; frame-ancestors 'none';",
-    hsts="max-age=31536000; includeSubDomains",
-    referrer="strict-origin-when-cross-origin",
-    cache="no-cache, no-store, must-revalidate",
-    content="nosniff"
-)
+# Security headers will be set manually in middleware
 
 class SecurityMiddleware(BaseHTTPMiddleware):
     """Custom security middleware for additional protections."""
@@ -56,14 +48,14 @@ class SecurityMiddleware(BaseHTTPMiddleware):
         # Process request
         response = await call_next(request)
         
-        # Add security headers
-        secure_headers.framework.fastapi(response)
-        
-        # Add custom security headers
+        # Add security headers manually
+        response.headers["Strict-Transport-Security"] = "max-age=31536000; includeSubDomains"
+        response.headers["Content-Security-Policy"] = "default-src 'self'; script-src 'self' 'unsafe-inline' 'unsafe-eval'; style-src 'self' 'unsafe-inline'; img-src 'self' data: https:; font-src 'self' https:; connect-src 'self'; frame-ancestors 'none';"
         response.headers["X-Content-Type-Options"] = "nosniff"
         response.headers["X-Frame-Options"] = "DENY"
-        response.headers["X-XSS-Protection"] = "1; mode=block"
         response.headers["Referrer-Policy"] = "strict-origin-when-cross-origin"
+        response.headers["Cache-Control"] = "no-cache, no-store, must-revalidate"
+        response.headers["X-XSS-Protection"] = "1; mode=block"
         response.headers["Permissions-Policy"] = "geolocation=(), microphone=(), camera=()"
         
         return response
