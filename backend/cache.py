@@ -6,6 +6,7 @@ import asyncio
 from datetime import datetime, timedelta
 from typing import Any, Optional, Dict, List
 from functools import wraps
+from contextlib import asynccontextmanager
 
 import redis
 from fakeredis import FakeRedis
@@ -334,3 +335,13 @@ async def invalidate_user_data(user_id: int):
 async def invalidate_task_data(task_id: int, user_id: int = None):
     """Invalidate task data."""
     await cache_service.invalidate_task_cache(task_id, user_id)
+
+# Context manager for cache lifecycle
+@asynccontextmanager
+async def cache_context():
+    """Context manager for cache service lifecycle."""
+    await cache_service.connect()
+    try:
+        yield cache_service
+    finally:
+        await cache_service.disconnect()
