@@ -7,8 +7,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from sqlalchemy.orm import Session
 from pydantic import BaseModel
 
-from database import get_db
-from auth import get_current_active_user
+from auth import get_current_active_user, get_db
 from models import User
 from search import search_service, SearchFilters, SortField, SortOrder
 from security import rate_limit_api

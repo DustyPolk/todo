@@ -6,15 +6,7 @@ from fastapi import APIRouter, Depends, HTTPException, Request, BackgroundTasks
 from sqlalchemy.orm import Session
 from pydantic import BaseModel, validator
 
-from database import SessionLocal
-
-def get_db():
-    db = SessionLocal()
-    try:
-        yield db
-    finally:
-        db.close()
-from auth import get_current_active_user, check_user_role
+from auth import get_current_active_user, check_user_role, get_db
 from models import User
 from bulk_operations import bulk_service, BulkOperationType, TaskTemplate
 from security import rate_limit_api
