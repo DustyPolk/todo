@@ -172,3 +172,12 @@ test_*.db
 
 # Local development
 *.local
+
+# Added by Task Master AI
+dev-debug.log
+# Environment variables
+.vscode
+# OS specific
+# Task files
+tasks.json
+tasks/ 
