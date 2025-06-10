@@ -13,6 +13,7 @@ from routers import security as security_router
 from routers import oauth as oauth_router
 from routers import cache as cache_router
 from routers import search as search_router
+from routers import bulk as bulk_router
 from auth import get_current_user, get_current_active_user, check_user_role
 from config import CORS_ORIGINS
 from security import (
@@ -68,6 +69,7 @@ app.include_router(security_router.router)
 app.include_router(oauth_router.router)
 app.include_router(cache_router.router)
 app.include_router(search_router.router)
+app.include_router(bulk_router.router)
 
 def get_db():
     db = SessionLocal()
