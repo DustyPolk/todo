@@ -21,7 +21,10 @@
       "Bash(./start-dev.sh:*)",
       "Bash(sudo lsof:*)",
       "Bash(sudo kill:*)",
-      "Bash(npm uninstall:*)"
+      "Bash(npm uninstall:*)",
+      "Bash(uv pip install:*)",
+      "Bash(kill:*)",
+      "Bash(git add:*)"
     ],
     "deny": []
   }
