@@ -44,3 +44,23 @@ RATE_LIMIT_PUBLIC = "1000/hour"  # Public endpoints
 SECURITY_EVENT_RETENTION_HOURS = 168  # 7 days
 MAX_FAILED_ATTEMPTS_PER_IP = 10
 IP_BLOCK_DURATION_MINUTES = 60
+
+# OAuth2 Configuration
+GOOGLE_CLIENT_ID = config("GOOGLE_CLIENT_ID", default="")
+GOOGLE_CLIENT_SECRET = config("GOOGLE_CLIENT_SECRET", default="")
+GITHUB_CLIENT_ID = config("GITHUB_CLIENT_ID", default="")
+GITHUB_CLIENT_SECRET = config("GITHUB_CLIENT_SECRET", default="")
+
+# OAuth2 URLs
+GOOGLE_DISCOVERY_URL = "https://accounts.google.com/.well-known/openid_configuration"
+GITHUB_AUTHORIZE_URL = "https://github.com/login/oauth/authorize"
+GITHUB_TOKEN_URL = "https://github.com/login/oauth/access_token"
+GITHUB_USER_URL = "https://api.github.com/user"
+
+# OAuth2 Redirect URIs (adjust for your domain)
+BASE_URL = config("BASE_URL", default="http://localhost:8000")
+GOOGLE_REDIRECT_URI = f"{BASE_URL}/api/auth/oauth/google/callback"
+GITHUB_REDIRECT_URI = f"{BASE_URL}/api/auth/oauth/github/callback"
+
+# OAuth2 State signing key
+OAUTH_STATE_SECRET = config("OAUTH_STATE_SECRET", default="oauth-state-secret-change-in-production")

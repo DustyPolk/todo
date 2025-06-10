@@ -10,6 +10,7 @@ import schemas
 from database import SessionLocal, engine
 from routers import auth as auth_router
 from routers import security as security_router
+from routers import oauth as oauth_router
 from auth import get_current_user, get_current_active_user, check_user_role
 from config import CORS_ORIGINS
 from security import (
@@ -47,6 +48,7 @@ app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
 # Include routers
 app.include_router(auth_router.router)
 app.include_router(security_router.router)
+app.include_router(oauth_router.router)
 
 def get_db():
     db = SessionLocal()

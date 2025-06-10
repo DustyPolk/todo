@@ -12,10 +12,12 @@ class UserBase(BaseModel):
     is_verified: bool = False
 
 class UserCreate(UserBase):
-    password: str = Field(..., min_length=12)
+    password: Optional[str] = Field(None, min_length=12)  # Optional for OAuth users
     
     @validator('password')
     def validate_password(cls, v):
+        if v is None:  # Skip validation for OAuth users
+            return v
         if not re.search(r'[A-Z]', v):
             raise ValueError('Password must contain at least one uppercase letter')
         if not re.search(r'[a-z]', v):
@@ -39,12 +41,51 @@ class User(UserBase):
     updated_at: datetime
     failed_login_attempts: int = 0
     locked_until: Optional[datetime] = None
+    oauth_provider: Optional[str] = None
+    oauth_id: Optional[str] = None
+    avatar_url: Optional[str] = None
 
     class Config:
         from_attributes = True
 
 class UserInDB(User):
-    hashed_password: str
+    hashed_password: Optional[str] = None
+
+# OAuth2 Schemas
+class OAuthAccount(BaseModel):
+    provider: str
+    provider_user_id: str
+    email: Optional[str] = None
+    username: Optional[str] = None
+    avatar_url: Optional[str] = None
+    created_at: datetime
+    updated_at: datetime
+
+    class Config:
+        from_attributes = True
+
+class OAuthAuthorizationRequest(BaseModel):
+    provider: str  # google or github
+
+class OAuthAuthorizationResponse(BaseModel):
+    authorization_url: str
+    state: str
+
+class OAuthCallbackRequest(BaseModel):
+    code: str
+    state: str
+
+class OAuthUserInfo(BaseModel):
+    id: str
+    email: Optional[str]
+    name: Optional[str]
+    username: Optional[str]
+    avatar_url: Optional[str]
+    verified_email: Optional[bool] = False
+
+class AccountLinkRequest(BaseModel):
+    provider: str
+    link_token: str  # Temporary token to link accounts
 
 # Authentication Schemas
 class Token(BaseModel):
