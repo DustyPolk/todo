@@ -64,3 +64,30 @@ GITHUB_REDIRECT_URI = f"{BASE_URL}/api/auth/oauth/github/callback"
 
 # OAuth2 State signing key
 OAUTH_STATE_SECRET = config("OAUTH_STATE_SECRET", default="oauth-state-secret-change-in-production")
+
+# Redis Configuration
+REDIS_URL = config("REDIS_URL", default="redis://localhost:6379/0")
+REDIS_HOST = config("REDIS_HOST", default="localhost")
+REDIS_PORT = int(config("REDIS_PORT", default="6379"))
+REDIS_DB = int(config("REDIS_DB", default="0"))
+REDIS_PASSWORD = config("REDIS_PASSWORD", default=None)
+REDIS_SSL = config("REDIS_SSL", default="false").lower() == "true"
+
+# Cache Configuration
+CACHE_DEFAULT_TTL = int(config("CACHE_DEFAULT_TTL", default="300"))  # 5 minutes
+CACHE_LONG_TTL = int(config("CACHE_LONG_TTL", default="3600"))  # 1 hour
+CACHE_SHORT_TTL = int(config("CACHE_SHORT_TTL", default="60"))  # 1 minute
+
+# Session Configuration
+SESSION_TTL = int(config("SESSION_TTL", default="86400"))  # 24 hours
+SESSION_CLEANUP_INTERVAL = int(config("SESSION_CLEANUP_INTERVAL", default="3600"))  # 1 hour
+
+# Rate Limiting Storage
+RATE_LIMIT_STORAGE_URL = config("RATE_LIMIT_STORAGE_URL", default=REDIS_URL)
+
+# Cache Keys Prefixes
+CACHE_PREFIX = "todo_cache:"
+SESSION_PREFIX = "todo_session:"
+RATE_LIMIT_PREFIX = "todo_ratelimit:"
+USER_CACHE_PREFIX = "todo_user:"
+TASK_CACHE_PREFIX = "todo_task:"

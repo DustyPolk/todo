@@ -11,25 +11,40 @@ from database import SessionLocal, engine
 from routers import auth as auth_router
 from routers import security as security_router
 from routers import oauth as oauth_router
+from routers import cache as cache_router
 from auth import get_current_user, get_current_active_user, check_user_role
 from config import CORS_ORIGINS
 from security import (
     SecurityMiddleware, limiter, rate_limit_api, rate_limit_public,
     security_logger
 )
+from cache import cache_service, cache_context, invalidate_user_data, invalidate_task_data
+from session import SessionMiddleware
 
 models.Base.metadata.create_all(bind=engine)
+
+async def lifespan(app: FastAPI):
+    """Handle application startup and shutdown."""
+    # Startup
+    await cache_service.connect()
+    print("🚀 Application startup complete")
+    yield
+    # Shutdown
+    await cache_service.disconnect()
+    print("🛑 Application shutdown complete")
 
 app = FastAPI(
     title="Todo API", 
     version="1.0.0",
     docs_url="/docs",  # Swagger UI
-    redoc_url="/redoc"  # ReDoc
+    redoc_url="/redoc",  # ReDoc
+    lifespan=lifespan
 )
 
-# Add security middleware
-app.add_middleware(SecurityMiddleware)
-app.add_middleware(SlowAPIMiddleware)
+# Add middlewares (order matters - last added is executed first)
+app.add_middleware(SessionMiddleware)  # Session handling
+app.add_middleware(SecurityMiddleware)  # Security checks
+app.add_middleware(SlowAPIMiddleware)  # Rate limiting
 
 # Add CORS middleware
 app.add_middleware(
@@ -49,6 +64,7 @@ app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
 app.include_router(auth_router.router)
 app.include_router(security_router.router)
 app.include_router(oauth_router.router)
+app.include_router(cache_router.router)
 
 def get_db():
     db = SessionLocal()
@@ -69,7 +85,7 @@ def health_check(request: Request):
 
 @app.get("/api/tasks", response_model=List[schemas.Task])
 @rate_limit_api()
-def get_tasks(
+async def get_tasks(
     request: Request,
     skip: int = 0,
     limit: int = 100,
@@ -78,24 +94,56 @@ def get_tasks(
     current_user: models.User = Depends(get_current_active_user),
     db: Session = Depends(get_db)
 ):
-    query = db.query(models.Task)
+    # Create cache key based on user and filters
+    cache_key = f"user_{current_user.id}_tasks_{skip}_{limit}_{completed}_{priority}"
     
-    # Filter by user unless admin
-    if current_user.role != "admin":
-        query = query.filter(models.Task.user_id == current_user.id)
+    # Try to get from cache first
+    cached_tasks = await cache_service.get_user_tasks(current_user.id) if skip == 0 and not completed and not priority else None
     
-    if completed is not None:
-        query = query.filter(models.Task.completed == completed)
-    
-    if priority:
-        query = query.filter(models.Task.priority == priority)
-    
-    tasks = query.offset(skip).limit(limit).all()
-    return tasks
+    if cached_tasks is None:
+        # Query database
+        query = db.query(models.Task)
+        
+        # Filter by user unless admin
+        if current_user.role != "admin":
+            query = query.filter(models.Task.user_id == current_user.id)
+        
+        if completed is not None:
+            query = query.filter(models.Task.completed == completed)
+        
+        if priority:
+            query = query.filter(models.Task.priority == priority)
+        
+        tasks = query.offset(skip).limit(limit).all()
+        
+        # Convert to dict for caching
+        tasks_data = [
+            {
+                "id": task.id,
+                "title": task.title,
+                "description": task.description,
+                "completed": task.completed,
+                "priority": task.priority,
+                "due_date": task.due_date.isoformat() if task.due_date else None,
+                "user_id": task.user_id,
+                "created_at": task.created_at.isoformat(),
+                "updated_at": task.updated_at.isoformat()
+            }
+            for task in tasks
+        ]
+        
+        # Cache simple user tasks (no filters)
+        if skip == 0 and not completed and not priority and current_user.role != "admin":
+            await cache_service.cache_user_tasks(current_user.id, tasks_data, 300)  # 5 minutes
+        
+        return tasks
+    else:
+        # Return cached data as Pydantic models
+        return [schemas.Task(**task_data) for task_data in cached_tasks]
 
 @app.post("/api/tasks", response_model=schemas.Task)
 @rate_limit_api()
-def create_task(
+async def create_task(
     request: Request,
     task: schemas.TaskCreate,
     current_user: models.User = Depends(get_current_active_user),
@@ -105,6 +153,10 @@ def create_task(
     db.add(db_task)
     db.commit()
     db.refresh(db_task)
+    
+    # Invalidate user's task cache
+    await invalidate_user_data(current_user.id)
+    
     return db_task
 
 @app.get("/api/tasks/{task_id}", response_model=schemas.Task)
@@ -127,7 +179,7 @@ def get_task(
 
 @app.put("/api/tasks/{task_id}", response_model=schemas.Task)
 @rate_limit_api()
-def update_task(
+async def update_task(
     request: Request,
     task_id: int,
     task: schemas.TaskUpdate,
@@ -147,6 +199,10 @@ def update_task(
     
     db.commit()
     db.refresh(db_task)
+    
+    # Invalidate cache
+    await invalidate_task_data(task_id, db_task.user_id)
+    
     return db_task
 
 @app.patch("/api/tasks/{task_id}", response_model=schemas.Task)
@@ -162,7 +218,7 @@ def patch_task(
 
 @app.delete("/api/tasks/{task_id}")
 @rate_limit_api()
-def delete_task(
+async def delete_task(
     request: Request,
     task_id: int,
     current_user: models.User = Depends(get_current_active_user),
@@ -176,8 +232,13 @@ def delete_task(
     if current_user.role != "admin" and db_task.user_id != current_user.id:
         raise HTTPException(status_code=403, detail="Not authorized to delete this task")
     
+    user_id = db_task.user_id
     db.delete(db_task)
     db.commit()
+    
+    # Invalidate cache
+    await invalidate_task_data(task_id, user_id)
+    
     return {"message": "Task deleted successfully"}
 
 @app.get("/api/stats")
