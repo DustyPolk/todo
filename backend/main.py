@@ -12,6 +12,7 @@ from routers import auth as auth_router
 from routers import security as security_router
 from routers import oauth as oauth_router
 from routers import cache as cache_router
+from routers import search as search_router
 from auth import get_current_user, get_current_active_user, check_user_role
 from config import CORS_ORIGINS
 from security import (
@@ -20,6 +21,7 @@ from security import (
 )
 from cache import cache_service, cache_context, invalidate_user_data, invalidate_task_data
 from session import SessionMiddleware
+from search import search_service
 
 models.Base.metadata.create_all(bind=engine)
 
@@ -65,6 +67,7 @@ app.include_router(auth_router.router)
 app.include_router(security_router.router)
 app.include_router(oauth_router.router)
 app.include_router(cache_router.router)
+app.include_router(search_router.router)
 
 def get_db():
     db = SessionLocal()
@@ -154,8 +157,9 @@ async def create_task(
     db.commit()
     db.refresh(db_task)
     
-    # Invalidate user's task cache
+    # Invalidate user's task cache and search cache
     await invalidate_user_data(current_user.id)
+    await search_service.invalidate_search_cache(current_user.id)
     
     return db_task
 
@@ -200,8 +204,9 @@ async def update_task(
     db.commit()
     db.refresh(db_task)
     
-    # Invalidate cache
+    # Invalidate cache and search cache
     await invalidate_task_data(task_id, db_task.user_id)
+    await search_service.invalidate_search_cache(db_task.user_id)
     
     return db_task
 
@@ -236,8 +241,9 @@ async def delete_task(
     db.delete(db_task)
     db.commit()
     
-    # Invalidate cache
+    # Invalidate cache and search cache
     await invalidate_task_data(task_id, user_id)
+    await search_service.invalidate_search_cache(user_id)
     
     return {"message": "Task deleted successfully"}
 
