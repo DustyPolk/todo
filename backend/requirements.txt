@@ -11,3 +11,6 @@ python-decouple==3.8
 pydantic[email]==2.5.0
 httpx==0.25.2
 requests==2.31.0
+slowapi==0.1.9
+secure==0.3.0
+pydantic-settings==2.1.0

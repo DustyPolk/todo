@@ -29,3 +29,18 @@ CORS_ORIGINS = [
 
 # Database settings
 DATABASE_URL = config("DATABASE_URL", default="sqlite:///./todos.db")
+
+# API Security settings
+API_KEY_PREFIX = "todo_"
+MAX_REQUEST_SIZE = 10 * 1024 * 1024  # 10MB
+CSRF_SECRET_KEY = config("CSRF_SECRET_KEY", default="csrf-secret-key-change-in-production")
+
+# Rate limiting settings (requests per time period)
+RATE_LIMIT_AUTH = "5/minute"  # Authentication endpoints
+RATE_LIMIT_API = "100/minute"  # General API endpoints  
+RATE_LIMIT_PUBLIC = "1000/hour"  # Public endpoints
+
+# Security monitoring
+SECURITY_EVENT_RETENTION_HOURS = 168  # 7 days
+MAX_FAILED_ATTEMPTS_PER_IP = 10
+IP_BLOCK_DURATION_MINUTES = 60

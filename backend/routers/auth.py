@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, status, Request
 from fastapi.security import HTTPAuthorizationCredentials
 from sqlalchemy.orm import Session
 from datetime import datetime, timedelta
@@ -14,11 +14,13 @@ from auth import (
 )
 from config import ACCESS_TOKEN_EXPIRE_DELTA, SECRET_KEY, ALGORITHM
 from jose import JWTError, jwt
+from security import rate_limit_auth, rate_limit_api, security_logger
 
 router = APIRouter(prefix="/api/auth", tags=["authentication"])
 
 @router.post("/register", response_model=schemas.User)
-def register(user: schemas.UserCreate, db: Session = Depends(get_db)):
+@rate_limit_auth()
+def register(request: Request, user: schemas.UserCreate, db: Session = Depends(get_db)):
     """Register a new user."""
     # Check if user already exists
     existing_user = db.query(models.User).filter(
@@ -52,16 +54,31 @@ def register(user: schemas.UserCreate, db: Session = Depends(get_db)):
     db.commit()
     db.refresh(db_user)
     
+    # Log security event
+    security_logger.log_event(
+        "user_registered",
+        user_id=db_user.id,
+        ip_address=request.client.host,
+        details={"username": user.username, "email": user.email}
+    )
+    
     return db_user
 
 @router.post("/login", response_model=schemas.Token)
-def login(login_request: schemas.LoginRequest, db: Session = Depends(get_db)):
+@rate_limit_auth()
+def login(request: Request, login_request: schemas.LoginRequest, db: Session = Depends(get_db)):
     """Login and receive access and refresh tokens."""
     # Clean up expired tokens periodically
     cleanup_expired_tokens(db)
     
     user = authenticate_user(db, login_request.username, login_request.password)
     if not user:
+        # Log failed login attempt
+        security_logger.log_event(
+            "failed_login",
+            ip_address=request.client.host,
+            details={"username": login_request.username}
+        )
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Incorrect username or password",
@@ -77,6 +94,14 @@ def login(login_request: schemas.LoginRequest, db: Session = Depends(get_db)):
     access_token = create_access_token(access_token_data)
     refresh_token = create_refresh_token(user.id, db)
     
+    # Log successful login
+    security_logger.log_event(
+        "successful_login",
+        user_id=user.id,
+        ip_address=request.client.host,
+        details={"username": user.username}
+    )
+    
     return {
         "access_token": access_token,
         "refresh_token": refresh_token,
@@ -84,7 +109,9 @@ def login(login_request: schemas.LoginRequest, db: Session = Depends(get_db)):
     }
 
 @router.post("/refresh", response_model=schemas.Token)
+@rate_limit_auth()
 def refresh_token(
+    request: Request,
     refresh_request: schemas.RefreshTokenRequest,
     db: Session = Depends(get_db)
 ):
@@ -136,7 +163,9 @@ def refresh_token(
     }
 
 @router.post("/logout")
+@rate_limit_api()
 def logout(
+    request: Request,
     credentials: HTTPAuthorizationCredentials = Depends(security),
     db: Session = Depends(get_db)
 ):
@@ -158,12 +187,15 @@ def logout(
         )
 
 @router.get("/me", response_model=schemas.User)
-def get_current_user_info(current_user: models.User = Depends(get_current_user)):
+@rate_limit_api()
+def get_current_user_info(request: Request, current_user: models.User = Depends(get_current_user)):
     """Get current user information."""
     return current_user
 
 @router.post("/password-reset-request")
+@rate_limit_auth()
 def request_password_reset(
+    request: Request,
     reset_request: schemas.PasswordResetRequest,
     db: Session = Depends(get_db)
 ):
@@ -193,7 +225,9 @@ def request_password_reset(
     return {"message": "If the email exists, a password reset link has been sent"}
 
 @router.post("/password-reset-confirm")
+@rate_limit_auth()
 def confirm_password_reset(
+    request: Request,
     reset_confirm: schemas.PasswordResetConfirm,
     db: Session = Depends(get_db)
 ):

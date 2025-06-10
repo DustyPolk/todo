@@ -1,28 +1,52 @@
-from fastapi import FastAPI, Depends, HTTPException
+from fastapi import FastAPI, Depends, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
 from sqlalchemy.orm import Session
 from typing import List, Optional
+from slowapi import _rate_limit_exceeded_handler
+from slowapi.errors import RateLimitExceeded
+from slowapi.middleware import SlowAPIMiddleware
 import models
 import schemas
 from database import SessionLocal, engine
 from routers import auth as auth_router
+from routers import security as security_router
 from auth import get_current_user, get_current_active_user, check_user_role
 from config import CORS_ORIGINS
+from security import (
+    SecurityMiddleware, limiter, rate_limit_api, rate_limit_public,
+    security_logger
+)
 
 models.Base.metadata.create_all(bind=engine)
 
-app = FastAPI(title="Todo API", version="1.0.0")
+app = FastAPI(
+    title="Todo API", 
+    version="1.0.0",
+    docs_url="/docs",  # Swagger UI
+    redoc_url="/redoc"  # ReDoc
+)
 
+# Add security middleware
+app.add_middleware(SecurityMiddleware)
+app.add_middleware(SlowAPIMiddleware)
+
+# Add CORS middleware
 app.add_middleware(
     CORSMiddleware,
     allow_origins=CORS_ORIGINS,
     allow_credentials=True,
-    allow_methods=["*"],
+    allow_methods=["GET", "POST", "PUT", "DELETE", "PATCH"],
     allow_headers=["*"],
+    expose_headers=["X-Total-Count", "X-RateLimit-Limit", "X-RateLimit-Remaining"],
 )
 
-# Include authentication router
+# Add rate limiter
+app.state.limiter = limiter
+app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
+
+# Include routers
 app.include_router(auth_router.router)
+app.include_router(security_router.router)
 
 def get_db():
     db = SessionLocal()
@@ -32,15 +56,19 @@ def get_db():
         db.close()
 
 @app.get("/")
-def read_root():
+@rate_limit_public()
+def read_root(request: Request):
     return {"message": "Todo API is running"}
 
 @app.get("/api/health")
-def health_check():
-    return {"status": "healthy"}
+@rate_limit_public()
+def health_check(request: Request):
+    return {"status": "healthy", "timestamp": "2024-12-10T22:30:00Z"}
 
 @app.get("/api/tasks", response_model=List[schemas.Task])
+@rate_limit_api()
 def get_tasks(
+    request: Request,
     skip: int = 0,
     limit: int = 100,
     completed: Optional[bool] = None,
@@ -64,7 +92,9 @@ def get_tasks(
     return tasks
 
 @app.post("/api/tasks", response_model=schemas.Task)
+@rate_limit_api()
 def create_task(
+    request: Request,
     task: schemas.TaskCreate,
     current_user: models.User = Depends(get_current_active_user),
     db: Session = Depends(get_db)
@@ -76,7 +106,9 @@ def create_task(
     return db_task
 
 @app.get("/api/tasks/{task_id}", response_model=schemas.Task)
+@rate_limit_api()
 def get_task(
+    request: Request,
     task_id: int,
     current_user: models.User = Depends(get_current_active_user),
     db: Session = Depends(get_db)
@@ -92,7 +124,9 @@ def get_task(
     return task
 
 @app.put("/api/tasks/{task_id}", response_model=schemas.Task)
+@rate_limit_api()
 def update_task(
+    request: Request,
     task_id: int,
     task: schemas.TaskUpdate,
     current_user: models.User = Depends(get_current_active_user),
@@ -114,7 +148,9 @@ def update_task(
     return db_task
 
 @app.patch("/api/tasks/{task_id}", response_model=schemas.Task)
+@rate_limit_api()
 def patch_task(
+    request: Request,
     task_id: int,
     task: schemas.TaskUpdate,
     current_user: models.User = Depends(get_current_active_user),
@@ -123,7 +159,9 @@ def patch_task(
     return update_task(task_id, task, current_user, db)
 
 @app.delete("/api/tasks/{task_id}")
+@rate_limit_api()
 def delete_task(
+    request: Request,
     task_id: int,
     current_user: models.User = Depends(get_current_active_user),
     db: Session = Depends(get_db)
@@ -141,7 +179,9 @@ def delete_task(
     return {"message": "Task deleted successfully"}
 
 @app.get("/api/stats")
+@rate_limit_api()
 def get_stats(
+    request: Request,
     current_user: models.User = Depends(get_current_active_user),
     db: Session = Depends(get_db)
 ):
